@@ -1,5 +1,9 @@
 # Base Rug Pull Early Warning
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/khlndaaa/base-rugpull-warning?style=social)](https://github.com/khlndaaa/base-rugpull-warning/stargazers)
+[![Built for Base](https://img.shields.io/badge/Built%20for-Base-0052FF)](https://base.org)
+
 A public GitHub Actions template that daily scans a list of contracts on
 **Base** and computes a heuristic **risk score (0-100)** based on:
 
@@ -25,6 +29,30 @@ A public GitHub Actions template that daily scans a list of contracts on
 - This is not financial advice. Always verify a contract manually as
   well (Basescan/Blockscout, audits, project community) before making
   any decisions involving money.
+
+## Impact & Adoption
+
+This tool addresses a real, common problem: scam tokens are one of the
+most frequent ways new users get hurt right after coming onchain, and
+most rug-detection tools today are paid SaaS products behind a signup
+wall. This one is free, open-source, and self-hostable in minutes —
+fork the repo, add an address, done.
+
+- 🆓 Zero cost to run — entirely on GitHub Actions' free tier
+- 🔓 No signup, no server, no vendor lock-in — just fork and go
+- 🧩 Fully open-source (MIT) — read, audit, or extend the logic yourself
+- ⭐ If this tool caught something useful for you, a star helps other
+  people find it — and if you used it to catch a real rug attempt,
+  [open an issue](../../issues) or a discussion and share what
+  happened. Real-world catches will be listed here.
+
+**Used this tool and it helped?** Open a PR adding yourself to the list
+below — it helps others trust the project and helps track real-world
+impact:
+
+| Project / User | What it caught | Date |
+|---|---|---|
+| _add yours here_ | | |
 
 ## Quick start
 
