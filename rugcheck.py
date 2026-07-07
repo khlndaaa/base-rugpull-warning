@@ -36,8 +36,11 @@ BURN_ADDRESSES = {
     "0x000000000000000000000000000000000000dead",
 }
 
-# Function selector for owner() = keccak256("owner()")[:4]
-OWNER_SELECTOR = "0x8da5cb5b"
+# REST v2 endpoint (chain id in the URL path, not a query param) that
+# returns decoded values for parameterless read methods — this is the
+# same data source the "Read Contract" tab uses, more reliable than a
+# raw eth_call through the Etherscan-compatible proxy module.
+METHODS_READ_URL = f"https://api.blockscout.com/{CHAIN_ID}/api/v2/smart-contracts/{{address}}/methods-read"
 
 API_KEY = os.environ.get("BLOCKSCOUT_API_KEY")
 WATCHLIST_FILE = os.environ.get("WATCHLIST_FILE", "watchlist.json")
@@ -101,21 +104,37 @@ def get_source_code(address):
     return None
 
 
+OWNER_FUNCTION_NAMES = {"owner", "getowner", "_owner"}
+
+
 def get_owner_address(address):
-    data = api_get({
-        "module": "proxy",
-        "action": "eth_call",
-        "to": address,
-        "data": OWNER_SELECTOR,
-        "tag": "latest",
-    })
-    if not data:
+    try:
+        resp = requests.get(
+            METHODS_READ_URL.format(address=address),
+            params={"apikey": API_KEY},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        methods = resp.json()
+    except (requests.exceptions.RequestException, ValueError) as e:
+        print(f"⚠️  Failed to fetch read methods for owner check: {e}")
         return "error"
-    if "result" not in data or not data["result"] or data["result"] in ("0x", "0x0"):
+
+    if not isinstance(methods, list):
         return None
-    raw = data["result"]
-    # result is a 32-byte word; the address is in the last 20 bytes
-    return "0x" + raw[-40:].lower()
+
+    for method in methods:
+        name = str(method.get("name", "")).lower()
+        if name not in OWNER_FUNCTION_NAMES:
+            continue
+        outputs = method.get("outputs") or []
+        if outputs and "value" in outputs[0] and outputs[0]["value"]:
+            return str(outputs[0]["value"]).lower()
+        # method exists but Blockscout didn't pre-populate a value
+        return "error"
+
+    # no owner()-like function found — contract likely isn't Ownable
+    return None
 
 
 def scan_source_for_patterns(source_code):
