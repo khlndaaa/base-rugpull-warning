@@ -36,11 +36,13 @@ BURN_ADDRESSES = {
     "0x000000000000000000000000000000000000dead",
 }
 
-# REST v2 endpoint (chain id in the URL path, not a query param) that
-# returns decoded values for parameterless read methods — this is the
-# same data source the "Read Contract" tab uses, more reliable than a
-# raw eth_call through the Etherscan-compatible proxy module.
-METHODS_READ_URL = f"https://api.blockscout.com/{CHAIN_ID}/api/v2/smart-contracts/{{address}}/methods-read"
+# Direct standard JSON-RPC to Base's official public node — no
+# Etherscan/Blockscout compatibility layer involved, so it isn't
+# affected by their API migrations or quirks.
+BASE_RPC_URL = "https://mainnet.base.org"
+
+# Function selector for owner() = keccak256("owner()")[:4]
+OWNER_SELECTOR = "0x8da5cb5b"
 
 API_KEY = os.environ.get("BLOCKSCOUT_API_KEY")
 WATCHLIST_FILE = os.environ.get("WATCHLIST_FILE", "watchlist.json")
@@ -104,37 +106,31 @@ def get_source_code(address):
     return None
 
 
-OWNER_FUNCTION_NAMES = {"owner", "getowner", "_owner"}
-
-
 def get_owner_address(address):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_call",
+        "params": [{"to": address, "data": OWNER_SELECTOR}, "latest"],
+    }
     try:
-        resp = requests.get(
-            METHODS_READ_URL.format(address=address),
-            params={"apikey": API_KEY},
-            timeout=30,
-        )
+        resp = requests.post(BASE_RPC_URL, json=payload, timeout=30)
         resp.raise_for_status()
-        methods = resp.json()
+        data = resp.json()
     except (requests.exceptions.RequestException, ValueError) as e:
-        print(f"⚠️  Failed to fetch read methods for owner check: {e}")
+        print(f"⚠️  Failed to call owner() via RPC: {e}")
         return "error"
 
-    if not isinstance(methods, list):
+    if "error" in data:
+        # e.g. execution reverted — contract has no owner() function
         return None
 
-    for method in methods:
-        name = str(method.get("name", "")).lower()
-        if name not in OWNER_FUNCTION_NAMES:
-            continue
-        outputs = method.get("outputs") or []
-        if outputs and "value" in outputs[0] and outputs[0]["value"]:
-            return str(outputs[0]["value"]).lower()
-        # method exists but Blockscout didn't pre-populate a value
-        return "error"
+    raw = data.get("result")
+    if not raw or raw in ("0x", "0x0"):
+        return None
 
-    # no owner()-like function found — contract likely isn't Ownable
-    return None
+    # result is a 32-byte word; the address is in the last 20 bytes
+    return "0x" + raw[-40:].lower()
 
 
 def scan_source_for_patterns(source_code):
