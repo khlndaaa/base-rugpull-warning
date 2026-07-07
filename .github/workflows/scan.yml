@@ -2,7 +2,7 @@ name: Base Rug Pull Early Warning
 
 on:
   schedule:
-    - cron: "0 8 * * *"  # раз на день о 08:00 UTC
+    - cron: "0 8 * * *"  # once a day at 08:00 UTC
   workflow_dispatch: {}
 
 jobs:
