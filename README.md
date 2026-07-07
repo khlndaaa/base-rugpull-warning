@@ -1,85 +1,85 @@
 # Base Rug Pull Early Warning
 
-Публічний шаблон для GitHub Actions, який щодня сканує список контрактів
-у мережі **Base** і рахує евристичний **risk score (0-100)** на основі:
+A public GitHub Actions template that daily scans a list of contracts on
+**Base** and computes a heuristic **risk score (0-100)** based on:
 
-1. **Верифікація сорс-коду** — неверифікований контракт неможливо
-   перевірити напряму, це саме по собі великий сигнал обережності.
-2. **Патерни в коді**, які часто зустрічаються в шахрайських токенах:
-   можливість блокувати конкретні гаманці, довільно міняти
-   комісію/ліміти, вмикати/вимикати торгівлю, необмежена емісія тощо.
-3. **Статус власника** — чи "зречений" (renounced) власник контракту,
-   чи є в нього досі повний контроль.
-4. **Proxy/upgradeable** — чи можна підмінити логіку контракту вже
-   після деплою.
+1. **Source code verification** — an unverified contract can't be
+   inspected directly, which is itself a strong signal of caution.
+2. **Code patterns** commonly found in scam tokens: the ability to
+   blacklist specific wallets, arbitrarily change fees/limits, toggle
+   trading on/off, uncapped minting, and so on.
+3. **Owner status** — whether contract ownership has been renounced,
+   or the deployer still has full control.
+4. **Proxy/upgradeable** — whether the contract's logic could be
+   swapped after deployment.
 
-## ⚠️ Важливо розуміти обмеження
+## ⚠️ Understand the limitations
 
-- Це **евристичний скринінг, а не аудит безпеки**. Наявність
-  "підозрілої" функції не означає автоматично, що контракт шахрайський —
-  багато повністю легітимних токенів мають, наприклад, `pause()` чи
-  `mint()` з поважних причин.
-- Скрипт **не перевіряє**: чи заблокована ліквідність, чи можна продати
-  токен назад (honeypot-симуляцію), концентрацію холдерів. Це технічно
-  складніші перевірки, які вимагають додаткової інфраструктури.
-- Це не фінансова порада. Завжди перевіряй контракт додатково вручну
-  (Basescan/Blockscout, аудити, спільнота проєкту) перед будь-якими
-  рішеннями з грошима.
+- This is a **heuristic screening tool, not a security audit**. The
+  presence of a "suspicious" function does not automatically mean a
+  contract is a scam — many fully legitimate tokens have, for example,
+  `pause()` or `mint()` for valid reasons.
+- The script **does not check**: whether liquidity is locked, whether
+  the token can actually be sold back (honeypot simulation), or holder
+  concentration. Those require heavier infrastructure to check reliably.
+- This is not financial advice. Always verify a contract manually as
+  well (Basescan/Blockscout, audits, project community) before making
+  any decisions involving money.
 
-## Швидкий старт
+## Quick start
 
-### 1. Отримай безкоштовний Blockscout Pro API key
+### 1. Get a free Blockscout Pro API key
 
 1. https://dev.blockscout.com/ → Login
-2. Створи API key (безкоштовний тариф покриває Base)
+2. Create an API key (the free tier covers Base)
 
-### 2. Додай secret у свій репозиторій
+### 2. Add the secret to your repository
 
 **Settings → Secrets and variables → Actions → New repository secret**
 - Name: `BLOCKSCOUT_API_KEY`
-- Value: твій ключ
+- Value: your key
 
-### 3. Додай адреси контрактів у `watchlist.json`
+### 3. Add contract addresses to `watchlist.json`
 
 ```json
 [
-  "0xАдресаКонтракту1",
-  "0xАдресаКонтракту2"
+  "0xContractAddress1",
+  "0xContractAddress2"
 ]
 ```
 
-### 4. Запусти вручну
+### 4. Run it manually
 
 **Actions → Base Rug Pull Early Warning → Run workflow**
 
-Далі запускається автоматично раз на день о 08:00 UTC (міняється в
-`.github/workflows/scan.yml`, рядок `cron`).
+After that it runs automatically once a day at 08:00 UTC (change the
+`cron` line in `.github/workflows/scan.yml` to adjust).
 
-## Приклад виводу
+## Example output
 
 ```
-🔍 Сканую 1 контракт(ів) у мережі Base (chainId=8453)
-⚠️  Це евристичний скринінг, а не аудит безпеки. Перевіряй додатково вручну.
+🔍 Scanning 1 contract(s) on Base (chainId=8453)
+⚠️  This is a heuristic screening, not a security audit. Always verify manually.
 
-=== 0xАдресаКонтракту ===
-✅ Сорс-код верифікований | Proxy/upgradeable: ні
-👤 Власник: активний (0xabc...123)
-🔎 Знайдені патерни (2):
-   - maxTxAmount (+5) — довільні ліміти на транзакції/баланс
-   - mint (+4) — можлива додаткова емісія токенів після деплою
-📊 Risk score: 29/100 — 🟡 НИЗЬКИЙ РИЗИК
+=== 0xContractAddress ===
+✅ Source code verified | Proxy/upgradeable: no
+👤 Owner: active (0xabc...123)
+🔎 Patterns found (2):
+   - maxTxAmount (+5) — arbitrary transaction/balance limits
+   - mint (+4) — additional token supply can be minted post-deploy
+📊 Risk score: 29/100 — 🟡 LOW RISK
 ```
 
-## Структура
+## Structure
 
 ```
 .
-├── watchlist.json                # адреси контрактів для сканування
-├── rugcheck.py                    # основний скрипт
+├── watchlist.json                # contract addresses to scan
+├── rugcheck.py                    # main script
 ├── requirements.txt
-└── .github/workflows/scan.yml     # щоденний запуск + ручний
+└── .github/workflows/scan.yml     # daily run + manual trigger
 ```
 
-## Ліцензія
+## License
 
-MIT — використовуй, змінюй, форкай вільно.
+MIT — use it, modify it, fork it freely.
