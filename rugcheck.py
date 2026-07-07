@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """
-Base Rug Pull Early Warning (публічний шаблон).
+Base Rug Pull Early Warning (public template).
 
-Для кожного контракту з watchlist.json перевіряє кілька евристичних
-сигналів ризику й рахує "risk score" (0-100, вище = ризикованіше):
+For every contract in watchlist.json, checks a handful of heuristic risk
+signals and computes a "risk score" (0-100, higher = riskier):
 
-1. Чи верифікований сорс-код (неверифікований контракт — сам по собі
-   великий червоний прапорець, бо код неможливо перевірити).
-2. Наявність у верифікованому сорсі функцій/патернів, які часто
-   зустрічаються в шахрайських токенах (можливість блокувати конкретні
-   гаманці, довільно міняти комісію/ліміти транзакції, вимикати
-   торгівлю тощо).
-3. Чи "зречений" власник контракту (ownership renounced) — перевіряється
-   викликом owner() напряму в блокчейн.
-4. Чи є контракт proxy/upgradeable — власник міг би підмінити логіку
-   контракту після деплою.
+1. Whether the source code is verified (an unverified contract is itself
+   a big red flag, since its logic cannot be audited).
+2. Presence of code patterns commonly found in scam tokens (ability to
+   blacklist specific wallets, arbitrarily change fees/limits, toggle
+   trading on/off, etc.).
+3. Whether contract ownership has been renounced — checked with a direct
+   owner() call against the chain.
+4. Whether the contract is a proxy/upgradeable contract — the owner
+   could swap the logic after deployment.
 
-ВАЖЛИВО: це евристика для попереднього орієнтиру, а не аудит безпеки.
-Наявність окремої "підозрілої" функції не означає автоматично, що
-контракт шахрайський — багато легітимних токенів теж мають, наприклад,
-pause() чи mint(). Завжди перевіряй контракт додатково вручну і не
-покладайся тільки на цей скрипт для фінансових рішень.
+IMPORTANT: this is a heuristic screening tool, not a security audit.
+The presence of a single "suspicious" function does not automatically
+mean a contract is malicious — many fully legitimate tokens also have,
+for example, pause() or mint() for valid reasons. Always verify a
+contract manually as well, and never rely solely on this script for
+financial decisions.
 """
 
 import os
@@ -36,35 +36,36 @@ BURN_ADDRESSES = {
     "0x000000000000000000000000000000000000dead",
 }
 
-# Селектор функції owner() = keccak256("owner()")[:4]
+# Function selector for owner() = keccak256("owner()")[:4]
 OWNER_SELECTOR = "0x8da5cb5b"
 
 API_KEY = os.environ.get("BLOCKSCOUT_API_KEY")
 WATCHLIST_FILE = os.environ.get("WATCHLIST_FILE", "watchlist.json")
 
 if not API_KEY:
-    raise SystemExit("❌ Не заданий секрет BLOCKSCOUT_API_KEY")
+    raise SystemExit("❌ BLOCKSCOUT_API_KEY secret is not set")
 
-# Патерни в сорс-коді, які варто відзначити. Вага — орієнтовна, не точна
-# наука. Пошук — простий регістронезалежний підрядок (навмисно без
-# прив'язки до меж слова, щоб не пропускати збірні назви на кшталт
-# setMaxTxAmount). Список навмисно не вичерпний і не є інструкцією —
-# лише перелік публічно відомих назв функцій для статичного пошуку.
+# Patterns worth flagging in the source code. Weights are approximate,
+# not an exact science. Matching is a simple case-insensitive substring
+# search (deliberately without word-boundary anchors, so combined names
+# like setMaxTxAmount are still caught). The list is intentionally not
+# exhaustive and is not an exploit guide — it's just a set of publicly
+# known function names used for static text search.
 SUSPICIOUS_PATTERNS = [
-    ("blacklist", 8, "можливість блокувати конкретні адреси"),
-    ("excludefromfee", 6, "вибіркові комісії для різних адрес"),
-    ("settaxfee", 6, "комісію можна змінювати після деплою"),
-    ("setfee", 6, "комісію можна змінювати після деплою"),
-    ("maxtxamount", 5, "довільні ліміти на транзакції/баланс"),
-    ("maxwallet", 5, "довільні ліміти на баланс гаманця"),
-    ("antiwhale", 5, "штучні обмеження торгівлі"),
-    ("cooldown", 5, "штучні обмеження торгівлі"),
-    ("tradingenabled", 6, "торгівлю можна вмикати/вимикати вручну"),
-    ("opentrading", 6, "торгівлю можна вмикати/вимикати вручну"),
-    ("pause(", 5, "перекази можна повністю зупинити"),
-    ("mint(", 4, "можлива додаткова емісія токенів після деплою"),
-    ("selfdestruct", 7, "контракт можна знищити"),
-    ("delegatecall", 5, "делегування логіки іншому контракту"),
+    ("blacklist", 8, "ability to block specific addresses"),
+    ("excludefromfee", 6, "selective fees for different addresses"),
+    ("settaxfee", 6, "fees can be changed after deployment"),
+    ("setfee", 6, "fees can be changed after deployment"),
+    ("maxtxamount", 5, "arbitrary transaction/balance limits"),
+    ("maxwallet", 5, "arbitrary wallet balance limits"),
+    ("antiwhale", 5, "artificial trading restrictions"),
+    ("cooldown", 5, "artificial trading restrictions"),
+    ("tradingenabled", 6, "trading can be manually toggled on/off"),
+    ("opentrading", 6, "trading can be manually toggled on/off"),
+    ("pause(", 5, "transfers can be fully halted"),
+    ("mint(", 4, "additional token supply can be minted post-deploy"),
+    ("selfdestruct", 7, "the contract can be destroyed"),
+    ("delegatecall", 5, "logic can be delegated to another contract"),
 ]
 
 
@@ -86,7 +87,7 @@ def api_get(params, retries=2):
         except requests.exceptions.RequestException as e:
             if attempt < retries:
                 continue
-            print(f"⚠️  Не вдалося отримати дані ({params.get('action')}): {e}")
+            print(f"⚠️  Failed to fetch data ({params.get('action')}): {e}")
             return None
 
 
@@ -108,14 +109,13 @@ def get_owner_address(address):
         "data": OWNER_SELECTOR,
         "tag": "latest",
     })
-    if not data or "result" not in data:
+    if not data:
+        return "error"
+    if "result" not in data or not data["result"] or data["result"] in ("0x", "0x0"):
         return None
     raw = data["result"]
-    if not raw or raw in ("0x", "0x0"):
-        return None
-    # результат — 32-байтне слово, адреса в останніх 20 байтах
-    hex_addr = "0x" + raw[-40:]
-    return hex_addr.lower()
+    # result is a 32-byte word; the address is in the last 20 bytes
+    return "0x" + raw[-40:].lower()
 
 
 def scan_source_for_patterns(source_code):
@@ -157,13 +157,16 @@ def analyze_contract(address):
         score += 10
 
     owner = get_owner_address(address)
-    result["owner"] = owner
-    if owner is not None:
-        result["owner_renounced"] = owner in BURN_ADDRESSES
-        if not result["owner_renounced"]:
-            score += 20
-    # якщо owner() не викликається (контракт без такого патерну) —
-    # не штрафуємо, це просто означає, що контракт не Ownable
+    if owner == "error":
+        result["owner"] = "error"
+    else:
+        result["owner"] = owner
+        if owner is not None:
+            result["owner_renounced"] = owner in BURN_ADDRESSES
+            if not result["owner_renounced"]:
+                score += 20
+        # if owner() isn't callable (contract without that pattern) —
+        # don't penalize, it simply means the contract isn't Ownable
 
     result["risk_score"] = min(100, score)
     return result
@@ -171,12 +174,12 @@ def analyze_contract(address):
 
 def risk_label(score):
     if score >= 70:
-        return "🔴 ВИСОКИЙ РИЗИК"
+        return "🔴 HIGH RISK"
     if score >= 40:
-        return "🟠 СЕРЕДНІЙ РИЗИК"
+        return "🟠 MEDIUM RISK"
     if score >= 15:
-        return "🟡 НИЗЬКИЙ РИЗИК"
-    return "🟢 СИГНАЛІВ НЕ ЗНАЙДЕНО"
+        return "🟡 LOW RISK"
+    return "🟢 NO SIGNALS FOUND"
 
 
 def main():
@@ -185,13 +188,13 @@ def main():
 
     if not watchlist:
         print(
-            f"⚠️  У {WATCHLIST_FILE} немає реальних адрес (тільки приклад-заглушка). "
-            f"Додай адреси контрактів, які хочеш сканувати."
+            f"⚠️  {WATCHLIST_FILE} has no real addresses (only the example placeholder). "
+            f"Add the contract addresses you want to scan."
         )
         return
 
-    print(f"🔍 Сканую {len(watchlist)} контракт(ів) у мережі Base (chainId={CHAIN_ID})")
-    print("⚠️  Це евристичний скринінг, а не аудит безпеки. Перевіряй додатково вручну.")
+    print(f"🔍 Scanning {len(watchlist)} contract(s) on Base (chainId={CHAIN_ID})")
+    print("⚠️  This is a heuristic screening, not a security audit. Always verify manually.")
 
     for address in watchlist:
         print("")
@@ -200,24 +203,26 @@ def main():
         r = analyze_contract(address)
 
         if not r["verified"]:
-            print(f"❌ Сорс-код НЕ верифікований — {risk_label(r['risk_score'])} ({r['risk_score']}/100)")
-            print("   Неможливо перевірити логіку контракту напряму.")
+            print(f"❌ Source code is NOT verified — {risk_label(r['risk_score'])} ({r['risk_score']}/100)")
+            print("   Contract logic cannot be inspected directly.")
             continue
 
-        print(f"✅ Сорс-код верифікований | Proxy/upgradeable: {'так' if r['is_proxy'] else 'ні'}")
+        print(f"✅ Source code verified | Proxy/upgradeable: {'yes' if r['is_proxy'] else 'no'}")
 
-        if r["owner"] is not None:
-            status = "зречений (renounced)" if r["owner_renounced"] else f"активний ({r['owner']})"
-            print(f"👤 Власник: {status}")
+        if r["owner"] == "error":
+            print("👤 Owner: could not be checked (temporary API error)")
+        elif r["owner"] is not None:
+            status = "renounced" if r["owner_renounced"] else f"active ({r['owner']})"
+            print(f"👤 Owner: {status}")
         else:
-            print("👤 Власник: функція owner() відсутня або не Ownable-контракт")
+            print("👤 Owner: owner() function absent or contract isn't Ownable")
 
         if r["findings"]:
-            print(f"🔎 Знайдені патерни ({len(r['findings'])}):")
+            print(f"🔎 Patterns found ({len(r['findings'])}):")
             for name, weight, desc in r["findings"]:
                 print(f"   - {name} (+{weight}) — {desc}")
         else:
-            print("🔎 Підозрілих патернів у сорс-коді не знайдено")
+            print("🔎 No suspicious patterns found in the source code")
 
         print(f"📊 Risk score: {r['risk_score']}/100 — {risk_label(r['risk_score'])}")
 
